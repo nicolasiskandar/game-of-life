@@ -1,0 +1,1 @@
+let wrap x n = ((x mod n) + n) mod n

@@ -1,0 +1,1 @@
+val next_state : Cell.cell_state -> int -> Cell.cell_state

@@ -1,0 +1,3 @@
+(executable
+ (name main_gui)
+ (libraries game_of_life graphics unix))
