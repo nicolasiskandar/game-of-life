@@ -7,6 +7,7 @@ let all =
     Test_simulation.suite;
     Test_rle.suite;
     Test_sparse.suite;
+    Test_patterns.suite;
   ]
 
 let () = run_test_tt_main all

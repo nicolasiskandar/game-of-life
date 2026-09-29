@@ -10,7 +10,9 @@ of the project is pedagogical: it demonstrates a small, strictly modular OCaml
 codebase in which pure functions are separated from effects and every module
 declares its interface explicitly in an `.mli`.
 
----
+## Demo
+
+[![Game of Life Demo](https://img.youtube.com/vi/a4c3ghskK5s/0.jpg)](https://www.youtube.com/watch?v=a4c3ghskK5s)
 
 ## 1. Background
 
@@ -30,8 +32,6 @@ A finite implementation must commit to a boundary policy. The present library
 ships with two: the dense engine treats the grid as toroidal (cells on the
 edges wrap around), and the sparse engine treats the plane as having no
 boundary at all. Section 3 discusses the consequences.
-
----
 
 ## 2. The rules
 
@@ -57,8 +57,6 @@ three. The four familiar cases follow.
 Both simulation engines derive their behavior from the single function
 `Rules.next_state` in `lib/rules.ml`.
 
----
-
 ## 3. Implementation
 
 The library is organized as a strict acyclic dependency graph.
@@ -77,15 +75,16 @@ The library is organized as a strict acyclic dependency graph.
 | `Sparse`       | `Rules`, `Moore`                  |
 | `Render`       | `Grid`                            |
 | `Terminal`     | `Render`, `Simulation`            |
-| `View`         | `Grid`, `Simulation`              |
+| `View`         | `Grid`, `Simulation`, `Patterns`  |
 
 The graph is acyclic. `Cell` supplies the type `Alive | Dead`. `Grid` provides
 the dense representation together with `make_grid`, `index`, `get`, and `set`;
 `Boundary` implements the wrapping used by the toroidal engine. `Moore` and
 `Neighborhood` supply the shared eight-neighbor geometry and the live-neighbor
 count, and `Rules` encodes Section 2. `Simulation` provides `step` and
-`run_generations`. `Patterns` seeds a grid from an offset list and bundles the
-glider, blinker, and block. `Rle` parses the pattern format of Section 3.4.
+`run_generations`. `Patterns` seeds a grid from an offset list, centers a
+pattern without writing outside the grid, and bundles the fifteen patterns of
+`catalog`. `Rle` parses the pattern format of Section 3.4.
 `Sparse` provides the set-based engine. `Render` maps a grid to a string and is
 pure; `Terminal` and the graphical `View` animate it, and are the only modules
 that perform I/O.
@@ -153,8 +152,6 @@ A run without a count has length 1. For example, `3o!` places three live cells
 in a row, and `bob$2bo$3o!` encodes a glider. The function `Rle.parse_rle_body`
 returns the pattern as a list of offsets relative to the origin.
 
----
-
 ## 4. Usage
 
 ### 4.1 Prerequisites
@@ -205,8 +202,22 @@ dune exec bin/main.exe -- --pattern patterns/blinker.rle
 dune exec bin_gui/main_gui.exe
 ```
 
-This opens a 40 by 30 window and animates a glider through 300 generations.
-It requires a display and the X11 libraries.
+This opens a 48 by 30 window of 20 pixel cells, so the largest bundled pattern,
+the Gosper gun, has room to run. It requires a display and the X11 libraries.
+
+The viewer shows one pattern at a time, centered, and cycles through
+`Patterns.catalog`. Each pattern is reseeded from a blank grid so that the
+debris of one never leaks into the next.
+
+| Key                            | Action                       |
+| ------------------------------ | ---------------------------- |
+| Space, `n`, `j`                | Next pattern                 |
+| `p`, `k`                       | Previous pattern             |
+| `q`, Escape                    | Quit                         |
+
+A pattern also advances on its own after 200 generations, about ten seconds at
+the default frame rate, and the sequence loops. Keys jump ahead; nothing waits
+on them, so the viewer keeps running if the window manager withholds input.
 
 ### 4.5 Bundled patterns
 
@@ -220,7 +231,30 @@ The directory `patterns/` contains three files.
 
 Any valid RLE file can be loaded with `--pattern`.
 
----
+`Patterns.catalog` holds fifteen patterns for the graphical viewer, which does
+not read RLE. It runs from the still lifes through to the Gosper gun:
+
+| Pattern          | Size    | Behavior                                    |
+| ---------------- | ------- | ------------------------------------------- |
+| `block`          | 2x2     | Still life                                  |
+| `beehive`        | 3x4     | Still life                                  |
+| `boat`           | 3x3     | Still life                                  |
+| `loaf`           | 4x4     | Still life                                  |
+| `blinker`        | 1x3     | Period 2                                    |
+| `toad`           | 2x4     | Period 2                                    |
+| `beacon`         | 4x4     | Period 2                                    |
+| `pulsar`         | 13x13   | Period 3                                    |
+| `pentadecathlon` | 3x10    | Period 15                                   |
+| `glider`         | 3x3     | Spaceship, drifts diagonally                |
+| `lwss`           | 4x5     | Lightweight spaceship, drifts sideways      |
+| `r_pentomino`    | 3x3     | Methuselah, runs over a thousand generations|
+| `acorn`          | 3x7     | Methuselah, the longest-lived here          |
+| `diehard`        | 3x8     | Methuselah, extinct at generation 130       |
+| `gosper_gun`     | 9x36    | Fires gliders indefinitely                 |
+
+Note that the engine is toroidal (Section 3.1), so the gun's gliders wrap
+around and collide with its own debris. It reaches a steady state rather than
+expanding without bound, and it keeps firing throughout.
 
 ## 5. Testing
 
@@ -233,12 +267,11 @@ The test suite is split into one file per module under `test/`.
 | `simulation` | 4     | Blinker cycle, block fixpoint, wraparound, `run_generations` |
 | `rle`        | 3     | Parsing of glider, blinker, and block bodies         |
 | `sparse`     | 2     | Sparse and dense engines agree on block and glider   |
+| `patterns`   | 14    | Periods, spaceship drift, extinction, centering      |
 
-There are 17 tests in total. The `sparse` suite is the most consequential:
+There are 31 tests in total. The `sparse` suite is the most consequential:
 it asserts the property of Section 3.2, that the two engines compute the same
 successor on configurations that stay away from the boundary.
-
----
 
 ## 6. Project layout
 
@@ -253,23 +286,21 @@ successor on configurations that stay away from the boundary.
 │   ├── neighborhood.ml/.mli   live-neighbor counting
 │   ├── rules.ml/.mli          the transition rule of Section 2
 │   ├── simulation.ml/.mli     step, run_generations
-│   ├── patterns.ml/.mli       seeding and the bundled patterns
+│   ├── patterns.ml/.mli       seeding, centering, and the bundled patterns
 │   ├── rle.ml/.mli            pattern parser and file loader
 │   ├── sparse.ml/.mli         the set-based engine
 │   ├── render.ml/.mli         pure grid-to-string rendering
 │   └── terminal.ml/.mli       terminal clearing and animation
 ├── bin/                       the terminal executable (cli.ml/.mli, main.ml)
 ├── bin_gui/                   the graphical executable (view.ml/.mli, main_gui.ml)
-├── test/                      one suite per module (17 tests)
+├── test/                      one suite per module (31 tests)
 └── patterns/                  bundled RLE files (glider, blinker, block)
 ```
-
----
 
 ## 7. References
 
 [1] M. Gardner, "Mathematical Games," *Scientific American* 223, no. 4
-(October 1970). The column that introduced the Game of Life to a wide audience.
+(October 1970).
 
-[2] "Conway's Game of Life," Wikipedia. Accessed 2026.
+[2] "Conway's Game of Life," Wikipedia.
 https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
